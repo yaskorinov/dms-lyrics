@@ -1,0 +1,17 @@
+{
+    "id": "wordLyrics",
+    "name": "Word Lyrics",
+    "description": "Apple Music-style desktop lyrics with word-by-word sync (NetEase YRC, Musixmatch richsync, LRCLIB). Click a line to seek.",
+    "version": "1.0.0",
+    "author": "ufw_allow",
+    "category": "media",
+    "type": "desktop",
+    "capabilities": ["desktop-widget"],
+    "component": "./WordLyrics.qml",
+    "settings": "./WordLyricsSettings.qml",
+    "icon": "lyrics",
+    "requires_dms": ">=1.2.0",
+    "compositors": ["any"],
+    "distro": ["any"],
+    "permissions": ["settings_read", "settings_write", "network", "process"]
+}
