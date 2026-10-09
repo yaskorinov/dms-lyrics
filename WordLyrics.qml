@@ -443,26 +443,45 @@ DesktopPluginComponent {
         const it = lineRep.count > idx ? lineRep.itemAt(idx) : null;
         if (!it)
             return want;
-        const activeTop = colTargetY + it.y - lineGap * 0.25;
+        const activeTop = colTargetY + restY(idx) - lineGap * 0.25;
         return Math.max(0, Math.min(want, activeTop));
     }
     readonly property real fadeBottomPx: viewport.height * fadeBottomPct
 
     // Scroll: the column jumps to its target instantly, every line then gets a
     // compensating offset that springs back to 0 with a per-line delay.
-    readonly property real colTargetY: {
-        const idx = Math.max(0, activeIndex);
-        if (lineRep.count <= idx)
-            return viewport.height * anchorPos;
+    // y of a line once every interlude above it has finished expanding/collapsing.
+    // Scrolling aims at this resting layout, so an animating interlude only moves
+    // the lines below it and never drags the whole text back and forth.
+    function restY(idx) {
         const it = lineRep.itemAt(idx);
         if (!it)
+            return 0;
+        let y = it.y;
+        for (let j = 0; j < idx; j++) {
+            const g = lineRep.itemAt(j);
+            if (g && g.isGap)
+                y += g.restHeight - g.height;
+        }
+        return y;
+    }
+
+    readonly property real colTargetY: {
+        const idx = Math.max(0, activeIndex);
+        const it = lineRep.count > idx ? lineRep.itemAt(idx) : null;
+        if (!it)
             return viewport.height * anchorPos;
-        return viewport.height * anchorPos - (it.y + it.height / 2);
+        return viewport.height * anchorPos - (restY(idx) + it.restHeight / 2);
     }
 
     property int _scrollIndex: -2
 
-    onColTargetYChanged: {
+    // One active-line switch changes colTargetY several times in a row (index,
+    // then the interlude's height...). Apply it once, after bindings settle,
+    // so the whole move is compensated and animated instead of partly jumping.
+    onColTargetYChanged: Qt.callLater(applyScroll)
+
+    function applyScroll() {
         const dy = col.y - colTargetY;
         col.y = colTargetY;
         const lineChanged = activeIndex !== _scrollIndex;
@@ -496,14 +515,26 @@ DesktopPluginComponent {
         readonly property bool hovered: hover.containsMouse
 
         width: col.width
-        height: isGap ? (isActive ? root.rowH * 1.1 + root.lineGap : 0) : wordsBox.height + root.lineGap
+        // Collapsed interludes keep a hair of height: Column doesn't position
+        // zero-sized items, so at 0 the gap would sit at y=0 and scrolling to it
+        // would first aim at the top of the lyrics.
+        readonly property real restHeight: isGap ? (isActive ? root.rowH * 1.1 + root.lineGap : 0.01) : wordsBox.height + root.lineGap
+        height: restHeight
         clip: isGap
 
+        // An interlude opens/closes on the same timing as the scroll cascade, so
+        // the lines below it don't get pushed down first and pulled back later.
         Behavior on height {
             enabled: line.isGap
-            NumberAnimation {
-                duration: 420
-                easing.type: Easing.OutCubic
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: Math.max(0, Math.min(7, line.index - Math.max(0, root.activeIndex) + 1)) * root.scrollStagger
+                }
+                NumberAnimation {
+                    duration: root.scrollDuration
+                    easing.type: root.scrollCurve === "spring" ? Easing.InOutCubic : root.scrollEasing
+                    easing.bezierCurve: root.scrollBezier
+                }
             }
         }
 
